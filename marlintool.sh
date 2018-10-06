@@ -198,7 +198,18 @@ getHardwareDefinition()
 
     >&$l echo "  Moving board hardware definition into arduino directory..."
 
-    mv -f $repoPath/hardware/* "$arduinoHardwareDir"
+    if [ -f $repoPath/boards.txt ]; then
+      local hardwareDir="$arduinoHardwareDir/$(basename $repoPath)"
+      mkdir -p "$hardwareDir"
+      mv -f $repoPath/* "$hardwareDir"
+    elif [ -d $repoPath/hardware/ ]; then
+      mv -f $repoPath/hardware/* "$arduinoHardwareDir"
+    else
+      >&2 echo "Failed to find board.txt in hardware definition repository."
+      >&2 echo
+      exit 1
+    fi
+
     rm -rf $repoPath
   fi
 }
