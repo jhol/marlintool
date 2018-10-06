@@ -11,6 +11,7 @@ defaultParametersFile="marlintool.params"
 scriptName=$0
 
 l=2
+status_out=/dev/null
 
 ## Checks that the tools listed in arguments are all installed.
 checkTools()
@@ -41,9 +42,9 @@ downloadFile()
   local file=$2
 
   if [ "$curl" != "" ]; then
-    $curl -o "$file" "$url"
+    $curl -o "$file" "$url" >$status_out
   else
-    $wget -O "$file" "$url"
+    $wget -O "$file" "$url" >$status_out
   fi
 }
 
@@ -54,10 +55,10 @@ unpackArchive()
 
   case $archive in
     *.zip)
-      unzip -q "$archive" -d "$dir"
+      unzip -q "$archive" -d "$dir" >$status_out
       ;;
     *.tar.*)
-      tar -xf "$archive" -C "$dir" --strip 1
+      tar -xf "$archive" -C "$dir" --strip 1 >$status_out
       ;;
   esac
 }
@@ -82,7 +83,7 @@ getDependencies()
 
   for library in ${marlinDependencies[@]}; do
     IFS=',' read libName libUrl libDir <<< "$library"
-    git clone "$libUrl" "$libName"
+    git clone "$libUrl" "$libName" >$status_out
     rm -rf "$arduinoLibrariesDir"/"$libName"
     mv -f "$libName"/"$libDir" "$arduinoLibrariesDir"/"$libName"
     rm -rf "$libName"
@@ -95,9 +96,9 @@ getMarlin()
   >&$l echo -e "\nCloning Marlin \"$marlinRepositoryUrl\" ...\n"
 
   if [ "$marlinRepositoryBranch" != "" ]; then
-    git clone -b "$marlinRepositoryBranch" --single-branch "$marlinRepositoryUrl" "$marlinDir"
+    git clone -b "$marlinRepositoryBranch" --single-branch "$marlinRepositoryUrl" "$marlinDir" >$status_out
   else
-    git clone "$marlinRepositoryUrl" "$marlinDir"
+    git clone "$marlinRepositoryUrl" "$marlinDir" >$status_out
   fi
 
   exit
@@ -115,9 +116,9 @@ checkoutMarlin()
 
   >&$l echo -e "\nFetching most recent Marlin from \"$marlinRepositoryUrl\" ...\n"
 
-  git fetch
-  git checkout
-  git reset origin/`git rev-parse --abbrev-ref HEAD` --hard
+  git fetch >$status_out
+  git checkout >$status_out
+  git reset origin/`git rev-parse --abbrev-ref HEAD` --hard >$status_out
 
   >&$l echo -e "\n"
 
@@ -143,7 +144,7 @@ getHardwareDefinition()
 {
   if [ "$hardwareDefinitionRepo" != "" ]; then
     >&$l echo -e "\nCloning board hardware definition from \"$hardwareDefinitionRepo\" ... \n"
-    git clone "$hardwareDefinitionRepo"
+    git clone "$hardwareDefinitionRepo" >$status_out
 
     >&$l echo -e "\nMoving board hardware definition into arduino directory ... \n"
 
@@ -240,6 +241,7 @@ printUsage()
   echo "                               Overrides the default in the script."
   echo " -h, --help                  Show this doc."
   echo " -q, --quiet                 Don't print status messages."
+  echo " -v, --verbose               Print the output of sub-processes."
   echo
   exit
 }
@@ -328,6 +330,10 @@ while [ "$1" != "" ]; do
       ;;
     -q | --quiet )
       l=/dev/null
+      shift
+      ;;
+    -v | --verbose )
+      status_out=1
       shift
       ;;
     -h | --help )
