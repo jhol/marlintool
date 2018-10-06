@@ -8,6 +8,8 @@ set -e
 # The default config file to look for
 defaultParametersFile="marlintool.params"
 
+cacheDir=$PWD/.cache
+
 scriptName=$0
 
 l=2
@@ -36,16 +38,29 @@ checkCurlWget()
   fi
 }
 
-downloadFile()
+getFile()
 {
   local url=$1
   local file=$2
+  local cacheFile=$cacheDir/$file
 
-  if [ "$curl" != "" ]; then
-    $curl -o "$file" "$url" >$status_out
+  if [ ! -f $cacheFile ]; then
+    >&$l echo "  Downloading from $url..."
+
+    local downloadTmpFile=$tmpDir/download
+    if [ "$curl" != "" ]; then
+      $curl -o "$downloadTmpFile" "$url"
+    else
+      $wget -O "$downloadTmpFile" "$url"
+    fi
+
+    mkdir -p $cacheDir
+    mv $downloadTmpFile $cacheFile
   else
-    $wget -O "$file" "$url" >$status_out
+    >&$l echo "  Retrieving $(basename $file) from cache..."
   fi
+
+  echo $cacheFile
 }
 
 unpackArchive()
@@ -66,13 +81,16 @@ unpackArchive()
 ## Download the toolchain and unpack it
 getArduinoToolchain()
 {
-  >&$l echo -e "\nDownloading Arduino environment ...\n"
+  >&$l echo -e "\nGetting Arduino environment..."
 
-  downloadFile http://downloads-02.arduino.cc/"$arduinoToolchainArchive" $arduinoToolchainArchive
+  local archive=$(getFile http://downloads-02.arduino.cc/"$arduinoToolchainArchive" $arduinoToolchainArchive)
   mkdir -p "$arduinoDir/portable"
-  >&$l echo -e "\nUnpacking Arduino environment. This might take a while ...\n"
-  unpackArchive "$arduinoToolchainArchive" "$arduinoDir"
-  rm -R "$arduinoToolchainArchive"
+  >&$l echo "  Unpacking (this might take a while)..."
+  if [ "$os" == "Darwin" ]; then
+    unzip -q "$archive" -d "$arduinoDir"
+  else
+    tar -xf "$archive" -C "$arduinoDir" --strip 1
+  fi
 }
 
 
@@ -144,7 +162,7 @@ getHardwareDefinition()
 {
   if [ "$hardwareDefinitionRepo" != "" ]; then
     >&$l echo -e "\nCloning board hardware definition from \"$hardwareDefinitionRepo\" ... \n"
-    git clone "$hardwareDefinitionRepo" >$status_out
+    git clone "$hardwareDefinitionRepo"
 
     >&$l echo -e "\nMoving board hardware definition into arduino directory ... \n"
 
@@ -184,7 +202,7 @@ restoreMarlinConfiguration()
     cp configuration/"$1"/Configuration.h "$marlinDir"/Marlin/
     cp configuration/"$1"/Configuration_adv.h "$marlinDir"/Marlin/
   else
-    >&2 echo -e "\nBackup configuration/$1 not found!\n"
+    echo -e "\nBackup configuration/$1 not found!\n"
   fi
   exit
 }
@@ -217,6 +235,12 @@ cleanEverything()
   rm -Rf "$buildDir"
 }
 
+## Delete everything that was downloaded
+cleanCache()
+{
+  rm -Rf "$cacheDir"
+}
+
 ## Print help
 printUsage()
 {
@@ -237,13 +261,19 @@ printUsage()
   echo " -r, --restoreConfig [name]  Restore the given configuration into the Marlin directory."
   echo "                               Rename to Configuration.h implicitly."
   echo " -c, --clean                 Cleanup everything. Remove Marlin sources and Arduino toolchain"
+  echo " -C, --clean-cache           Clean up the download cache."
   echo " -p, --port [port]           Set the serialport for uploading the firmware."
   echo "                               Overrides the default in the script."
-  echo " -h, --help                  Show this doc."
   echo " -q, --quiet                 Don't print status messages."
   echo " -v, --verbose               Print the output of sub-processes."
+  echo " -h, --help                  Show this doc."
   echo
   exit
+}
+
+onExit()
+{
+  rm -rf $tmpDir
 }
 
 # Check for parameters file and source it if available
@@ -251,14 +281,18 @@ printUsage()
 if [ -f $defaultParametersFile ]; then
   source "$defaultParametersFile"
 else
-  >&2 echo -e "\n ==================================================================="
-  >&2 echo -e "\n  Can't find $defaultParametersFile!"
-  >&2 echo -e "\n  Please rename the \"$defaultParametersFile.example\" file placed in the"
-  >&2 echo -e "  same directory as this script to \"$defaultParametersFile\" and edit"
-  >&2 echo -e "  if neccessary.\n"
-  >&2 echo -e " ===================================================================\n\n"
+  echo -e "\n ==================================================================="
+  echo -e "\n  Can't find $defaultParametersFile!"
+  echo -e "\n  Please rename the \"$defaultParametersFile.example\" file placed in the"
+  echo -e "  same directory as this script to \"$defaultParametersFile\" and edit"
+  echo -e "  if neccessary.\n"
+  echo -e " ===================================================================\n\n"
   exit 1
 fi
+
+# Temporary directory
+tmpDir=$(mktemp -d "${TMPDIR:-/tmp}/marlintool.XXXXXX")
+trap "onExit" EXIT
 
 # Toolchain architecture
 arch=$(uname -m)
@@ -328,6 +362,9 @@ while [ "$1" != "" ]; do
       shift
       cleanEverything
       ;;
+    -C | --clean-cache )
+      shift
+      cleanCache
     -q | --quiet )
       l=/dev/null
       shift
