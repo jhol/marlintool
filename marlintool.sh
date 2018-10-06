@@ -3,6 +3,8 @@
 # by mmone with contribution by jhol, tssva
 # on github at https://github.com/mmone/marlintool
 
+set -e
+
 # The default config file to look for
 defaultParametersFile="marlintool.params"
 
