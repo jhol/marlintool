@@ -277,7 +277,9 @@ checkTools "$tools"
 checkCurlWget
 
 if [ "$1" = "" ]; then
-  printUsage; exit 1; fi
+  printUsage >&2
+  exit 1
+fi
 
 while [ "$1" != "" ]; do
   case $1 in
@@ -316,7 +318,7 @@ while [ "$1" != "" ]; do
       printUsage
       ;;
     * )
-      printUsage
+      printUsage >&2
       exit 1
   esac
   shift
