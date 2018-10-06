@@ -204,7 +204,7 @@ cleanEverything()
 }
 
 ## Print help
-printDocu()
+printUsage()
 {
   echo "Usage:"
   echo " $scriptName ARGS"
@@ -277,7 +277,7 @@ checkTools "$tools"
 checkCurlWget
 
 if [ "$1" = "" ]; then
-  printDocu; exit 1; fi
+  printUsage; exit 1; fi
 
 while [ "$1" != "" ]; do
   case $1 in
@@ -313,10 +313,10 @@ while [ "$1" != "" ]; do
       cleanEverything
       ;;
     -h | --help )
-      printDocu
+      printUsage
       ;;
     * )
-      printDocu
+      printUsage
       exit 1
   esac
   shift
