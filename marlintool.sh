@@ -38,6 +38,11 @@ checkCurlWget()
   fi
 }
 
+gitRepoName()
+{
+  basename "$1" ".${1##*.}"
+}
+
 getFile()
 {
   local url=$1
@@ -61,6 +66,34 @@ getFile()
   fi
 
   echo $cacheFile
+}
+
+getGitRepo()
+{
+  local url=$1
+  local branch=$2
+
+  local repoName=$(gitRepoName $url)
+  local repoDir=$tmpDir/$repoName
+  local cacheRepo=$cacheDir/$repoName
+
+  >&2 echo "  Getting $repoName..."
+  if [ -d $cacheRepo ]; then
+    >&$l echo "    Updating repository from $url..."
+    (cd $cacheRepo; git fetch -p origin 2>$status_out)
+  else
+    >&$l echo "    Cloning repository from $repoDir..."
+    git clone --bare $url $cacheRepo 2>$status_out
+  fi
+
+  >&2 echo "    Copying from cache..."
+  if [ "$marlinRepositoryBranch" != "" ]; then
+    git clone -b "$branch" --single-branch $cacheRepo $repoDir 2>$status_out
+  else
+    git clone $cacheRepo $repoDir 2>$status_out
+  fi
+
+  echo $repoDir
 }
 
 unpackArchive()
@@ -97,28 +130,22 @@ getArduinoToolchain()
 ## Get dependencies and move them in place
 getDependencies()
 {
-  >&$l echo -e "\nDownloading libraries ...\n"
+  >&$l echo -e "\nGetting libraries..."
 
   for library in ${marlinDependencies[@]}; do
     IFS=',' read libName libUrl libDir <<< "$library"
-    git clone "$libUrl" "$libName" >$status_out
-    rm -rf "$arduinoLibrariesDir"/"$libName"
-    mv -f "$libName"/"$libDir" "$arduinoLibrariesDir"/"$libName"
-    rm -rf "$libName"
+    local libRepo=$(getGitRepo "$libUrl" "")
+    mv -f "$libRepo/$libDir" "$arduinoLibrariesDir/$libName"
+    rm -rf "$libRepo"
   done
 }
 
 ## Clone Marlin
 getMarlin()
 {
-  >&$l echo -e "\nCloning Marlin \"$marlinRepositoryUrl\" ...\n"
-
-  if [ "$marlinRepositoryBranch" != "" ]; then
-    git clone -b "$marlinRepositoryBranch" --single-branch "$marlinRepositoryUrl" "$marlinDir" >$status_out
-  else
-    git clone "$marlinRepositoryUrl" "$marlinDir" >$status_out
-  fi
-
+  >&$l echo -e "\nGetting Marlin..."
+  local repoDir=$(getGitRepo "$marlinRepositoryUrl" "$marlinRepositoryBranch")
+  mv "$repoDir" "$marlinDir"
   exit
 }
 
@@ -161,15 +188,13 @@ setupEnvironment()
 getHardwareDefinition()
 {
   if [ "$hardwareDefinitionRepo" != "" ]; then
-    >&$l echo -e "\nCloning board hardware definition from \"$hardwareDefinitionRepo\" ... \n"
-    git clone "$hardwareDefinitionRepo"
+    >&$l echo -e "\nGetting board hardware definition..."
+    local repoPath=$(getGitRepo "$hardwareDefinitionRepo" "")
 
-    >&$l echo -e "\nMoving board hardware definition into arduino directory ... \n"
+    >&$l echo "  Moving board hardware definition into arduino directory..."
 
-    repoName=$(basename "$hardwareDefinitionRepo" ".${hardwareDefinitionRepo##*.}")
-
-    mv -f $repoName/hardware/* "$arduinoHardwareDir"
-    rm -rf $repoName
+    mv -f $repoPath/hardware/* "$arduinoHardwareDir"
+    rm -rf $repoPath
   fi
 }
 
