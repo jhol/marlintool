@@ -4,6 +4,7 @@
 # on github at https://github.com/mmone/marlintool
 
 set -e
+set -u
 
 # The default config file to look for
 defaultParametersFile="marlintool.params"
@@ -54,9 +55,9 @@ getFile()
 
     local downloadTmpFile=$tmpDir/download
     if [ "$curl" != "" ]; then
-      $curl -o "$downloadTmpFile" "$url"
+      $curl -o "$downloadTmpFile" "$url" 2>$status_out
     else
-      $wget -O "$downloadTmpFile" "$url"
+      $wget -O "$downloadTmpFile" "$url" 2>$status_out
     fi
 
     mkdir -p $cacheDir
@@ -77,12 +78,11 @@ getGitRepo()
   local repoDir=$tmpDir/$repoName
   local cacheRepo=$cacheDir/$repoName
 
-  >&2 echo "  Getting $repoName..."
   if [ -d $cacheRepo ]; then
-    >&$l echo "    Updating repository from $url..."
+    >&$l echo "  Updating repository from $url..."
     (cd $cacheRepo; git fetch -p origin 2>$status_out)
   else
-    >&$l echo "    Cloning repository from $repoDir..."
+    >&$l echo "  Cloning repository from $url..."
     git clone --bare $url $cacheRepo 2>$status_out
   fi
 
@@ -306,7 +306,7 @@ printUsage()
   echo " -p, --port [port]           Set the serialport for uploading the firmware."
   echo "                               Overrides the default in the script."
   echo " -q, --quiet                 Don't print status messages."
-  echo " -v, --verbose               Print the output of sub-processes."
+  echo " -V, --verbose               Print the output of sub-processes."
   echo " -h, --help                  Show this doc."
   echo
   exit
@@ -400,19 +400,16 @@ while [ "$1" != "" ]; do
       restoreMarlinConfiguration $1
       ;;
     -c | --clean )
-      shift
       cleanEverything
       ;;
     -C | --clean-cache )
-      shift
       cleanCache
+      ;;
     -q | --quiet )
       l=/dev/null
-      shift
       ;;
-    -v | --verbose )
-      status_out=1
-      shift
+    -V | --verbose )
+      status_out=/dev/stderr
       ;;
     -h | --help )
       printUsage
